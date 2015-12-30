@@ -1,9 +1,9 @@
 #!/bin/python
 
 ###############################################################################
-# python phoenixJobs.py --op=start|warmstop|coldstop
+# python phoenixJobs.py --op=start|stop
 #
-#    Starts or stops (warm or cold) jobs running on phoenix nodes.
+#    Starts or stops (kills tmux session) jobs running on phoenix nodes.
 #
 # OPTIONS:
 #
@@ -42,7 +42,6 @@ LOAD_LIMIT = False
 # The commands which will be executed in the docker container for the different options
 # Minimum amount of memory (in MB) needed per thread
 DOCKER_START_CMD = 'cd /host/opensurfaces; ./scripts/start_queue_worker.sh {machine_name} {thread_count} intrinsic'
-#DOCKER_WARM_STOP_CMD = 'cd /host/opensurfaces; ./scripts/start_queue_worker.sh {machine_name} {thread_count} intrinsic'
 
 
 ###############################################################################
@@ -91,8 +90,9 @@ def run_on_docker(machine_name, image_id, session_cmd, tmux_session, tmux_histor
 
     if session_cmd:
         start_cmd_list += [
-            "tmux new-session -s %s -d %s" % (qs(tmux_session), qs(session_cmd)),
+            "tmux new-session -s %s -d" % qs(tmux_session),
             "tmux set-option -t %s history-limit %s" % (qs(tmux_session), int(tmux_history_limit)),
+            "tmux send -t %s %s ENTER" % (qs(tmux_session), qs(session_cmd)),
         ]
     docker_cmd = '; '.join(start_cmd_list)
 
@@ -133,12 +133,8 @@ def main(args):
     if args.op == 'start':
         msg = 'Starting jobs...'
         docker_cmd = DOCKER_START_CMD
-    elif args.op == 'warmstop':
-        #msg = 'Stopping jobs (warm)...'
-        #docker_cmd = DOCKER_WARM_STOP_CMD
-        raise ValueError('Invalid operation: "%s"' % args.op)
-    elif args.op == 'coldstop':
-        msg = 'Stopping jobs (cold)...'
+    elif args.op == 'stop':
+        msg = 'Stopping jobs...'
         # Empty command kills the tmux session
         docker_cmd = ''
     else:
@@ -190,7 +186,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--op', required=True, choices=['start', 'warmstop', 'coldstop'])
+    parser.add_argument('--op', required=True, choices=['start', 'stop'])
     parser.add_argument('--verbose', dest='verbose', action='store_true')
     parser.add_argument('--no-verbose', dest='verbose', action='store_false')
     parser.set_defaults(verbose=False)
