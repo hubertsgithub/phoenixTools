@@ -18,7 +18,7 @@
 MACHINE_PREFIX = 'phoenix'
 
 # id following prefix:
-MACHINE_IDS = range(0, 11) + [13, 19, 20, 23, 24, 25, 26]
+MACHINE_IDS = range(0, 11) + [13, 18, 19, 20, 23, 24, 25, 26]
 #MACHINE_IDS = [10]
 MACHINE_ID_FORMAT = '%02d'
 
@@ -31,13 +31,13 @@ ROOT_PATH = '/home/bk472/projects/finegrained/code/'
 # Docker settings
 IMAGE_NAME = 'database.kmatzen.com:5000/bkovacs_opensurfaces'
 
-MIN_MEM = 2500
+MIN_MEM = 2000
 # Tmux specific settings
 # We start a tmux session for each docker command execution, so the user can easily kill them later
 TMUX_SESSION = 'celery'
 TMUX_HISTORY_LIMIT = '8000'
 # If the tmux session already exists, kill that before starting another
-KILL_EXISTING = True
+KILL_EXISTING = False
 # If this is true, we also stop the container when "stop" command is called
 STOP_CONTAINER = False
 # If true, we don't start more threads than the cpu count - current load
