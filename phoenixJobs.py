@@ -106,23 +106,23 @@ def get_image_id(machine_name, image_name, verbose=False):
 
 def get_mem_stats(machine_name, verbose=False):
     '''Gets free memory in megabytes on a certain machine'''
-    ssh_cmd = 'free -m | grep + | awk \'{print $3 $4}\''
+    ssh_cmd = 'free -m | grep + | awk \'{print $3 " " ($3+$4)}\''
     mem_stats = run_remotely(machine_name, ssh_cmd, verbose)
-    all_memory, free_memory = [int(mem) for mem in mem_stats]
+    free_memory, all_memory = [int(mem) for mem in mem_stats.split()]
     if verbose:
-        print 'Free memory on %s: %dMB/%dMB' % (machine_name, free_memory)
+        print 'Free memory on %s: %dMB/%dMB' % (machine_name, free_memory, all_memory)
 
-    return all_memory, free_memory
+    return free_memory, all_memory
 
 
 def get_cpu_stats(machine_name, verbose=False):
     '''Gets free memory in megabytes on a certain machine'''
-    ssh_cmd = 'uptime | sed -r "s/^.*load average: (.*$)/\1/" | tr "," " " | awk \'{print $1}\''
+    ssh_cmd = 'uptime | sed -r "s/^.*load average: (.*$)/\\1/" | tr "," " " | awk \'{print $1}\''
     load = float(run_remotely(machine_name, ssh_cmd, verbose))
     ssh_cmd = 'grep -c processor /proc/cpuinfo'
-    cpu_num = float(run_remotely(machine_name, ssh_cmd, verbose))
+    cpu_num = int(run_remotely(machine_name, ssh_cmd, verbose))
     if verbose:
-        print 'Load on %s: %f/%d' % (load, cpu_num)
+        print 'Load on %s: %.2f/%d' % (machine_name, load, cpu_num)
 
     return load, cpu_num
 
@@ -167,7 +167,7 @@ def main(args):
                 print 'Failed to start docker container... Skipping this machine.'
                 continue
 
-        all_memory, free_memory = get_mem_stats(machine_name, args.verbose)
+        free_memory, all_memory = get_mem_stats(machine_name, args.verbose)
         load, cpu_num = get_cpu_stats(machine_name, args.verbose)
         max_thread_count = max(0, min(free_memory / MIN_MEM, cpu_num - round(load)))
         print 'Max treads on %s: %d' % (machine_name, max_thread_count)
