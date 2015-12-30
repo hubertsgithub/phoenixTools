@@ -18,7 +18,7 @@
 MACHINE_PREFIX = 'phoenix'
 
 # id following prefix:
-MACHINE_IDS = [21]
+MACHINE_IDS = [0]
 MACHINE_ID_FORMAT = '%02d'
 
 # suffix following id:
@@ -30,13 +30,15 @@ ROOT_PATH = '/home/bk472/projects/finegrained/code/'
 # Docker settings
 IMAGE_NAME = 'database.kmatzen.com:5000/bkovacs_opensurfaces'
 
-MIN_MEM = 2000
+MIN_MEM = 1500
 # Tmux specific settings
 # We start a tmux session for each docker command execution, so the user can easily kill them later
 TMUX_SESSION = 'celery'
 TMUX_HISTORY_LIMIT = '8000'
 # If the tmux session already exists, kill that before starting another
 KILL_EXISTING = True
+# If true, we don't start more threads than the cpu count - current load
+LOAD_LIMIT = False
 # The commands which will be executed in the docker container for the different options
 # Minimum amount of memory (in MB) needed per thread
 DOCKER_START_CMD = 'cd /host/opensurfaces; ./scripts/start_queue_worker.sh {machine_name} {thread_count} intrinsic'
@@ -92,7 +94,7 @@ def run_on_docker(machine_name, image_id, session_cmd, tmux_session, tmux_histor
             "tmux new-session -s %s -d %s" % (qs(tmux_session), qs(session_cmd)),
             "tmux set-option -t %s history-limit %s" % (qs(tmux_session), int(tmux_history_limit)),
         ]
-    docker_cmd = ' ;'.join(start_cmd_list)
+    docker_cmd = '; '.join(start_cmd_list)
 
     ssh_cmd = 'docker exec -d --privileged --user=ubuntu %s zsh -c "%s"' % (image_id, docker_cmd)
     return run_remotely(machine_name, ssh_cmd, verbose)
@@ -105,14 +107,14 @@ def get_image_id(machine_name, image_name, verbose=False):
 
 
 def get_mem_stats(machine_name, verbose=False):
-    '''Gets free memory in megabytes on a certain machine'''
+    '''Gets used memory in megabytes on a certain machine'''
     ssh_cmd = 'free -m | grep + | awk \'{print $3 " " ($3+$4)}\''
     mem_stats = run_remotely(machine_name, ssh_cmd, verbose)
-    free_memory, all_memory = [int(mem) for mem in mem_stats.split()]
+    used_memory, all_memory = [int(mem) for mem in mem_stats.split()]
     if verbose:
-        print 'Free memory on %s: %dMB/%dMB' % (machine_name, free_memory, all_memory)
+        print 'Used memory on %s: %dMB/%dMB' % (machine_name, used_memory, all_memory)
 
-    return free_memory, all_memory
+    return used_memory, all_memory
 
 
 def get_cpu_stats(machine_name, verbose=False):
@@ -167,9 +169,14 @@ def main(args):
                 print 'Failed to start docker container... Skipping this machine.'
                 continue
 
-        free_memory, all_memory = get_mem_stats(machine_name, args.verbose)
+        used_memory, all_memory = get_mem_stats(machine_name, args.verbose)
         load, cpu_num = get_cpu_stats(machine_name, args.verbose)
-        max_thread_count = max(0, min(free_memory / MIN_MEM, cpu_num - round(load)))
+
+        max_thread_count = (all_memory - used_memory) / MIN_MEM
+        max_thread_count = min(max_thread_count, cpu_num)
+        if LOAD_LIMIT:
+            max_thread_count = min(max_thread_count, cpu_num - round(load))
+        max_thread_count = max(0, max_thread_count)
         print 'Max treads on %s: %d' % (machine_name, max_thread_count)
 
         if docker_cmd and max_thread_count == 0:
