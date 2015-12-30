@@ -31,7 +31,7 @@ ROOT_PATH = '/home/bk472/projects/finegrained/code/'
 # Docker settings
 IMAGE_NAME = 'database.kmatzen.com:5000/bkovacs_opensurfaces'
 
-MIN_MEM = 1500
+MIN_MEM = 2500
 # Tmux specific settings
 # We start a tmux session for each docker command execution, so the user can easily kill them later
 TMUX_SESSION = 'celery'
@@ -39,7 +39,7 @@ TMUX_HISTORY_LIMIT = '8000'
 # If the tmux session already exists, kill that before starting another
 KILL_EXISTING = True
 # If this is true, we also stop the container when "stop" command is called
-STOP_CONTAINER = True
+STOP_CONTAINER = False
 # If true, we don't start more threads than the cpu count - current load
 LOAD_LIMIT = False
 # The commands which will be executed in the docker container for the different options
