@@ -14,24 +14,36 @@
 ###############################################################################
 # EDIT THIS TO CHANGE THE MACHINES WHICH ARE USED FOR EXECUTING JOBS
 
-# basename prefix:
-MACHINE_PREFIX = 'phoenix'
-
-# id following prefix:
-MACHINE_IDS = range(0, 11) + [13, 18, 19, 20, 23, 24, 25, 26]
-#MACHINE_IDS = [10]
 MACHINE_ID_FORMAT = '%02d'
 
 # suffix following id:
 #MACHINE_SUFFIX = '.cs.cornell.edu'
 MACHINE_SUFFIX = ''
 
-ROOT_PATH = '/home/bk472/projects/finegrained/code/'
+# key: machine prefix, value: list of ids followed by prefix
+MACHINE_NAME_CONFIG = [
+    {
+        'machine_prefix': 'phoenix',
+        'machine_ids': range(1, 5) + [6, 7] + range(9, 14) + [16, 17], #range(22, 25) + range(26, 30),
+        'root_path': '/home/bk472/projects/finegrained/code/',
+    },
+    #{
+        #'machine_prefix': 'zeus',
+        #'machine_ids': [1, ],
+        #'root_path': '/home/bkovacs/projects/finegrained/code/',
+        #'load_limit': True,
+        #'max_thread_count': 20,
+    #},
+    #{
+        #'machine_prefix': 'zeus',
+        #'machine_ids': [2, ],
+        #'root_path': '/home/bkovacs/projects/finegrained/code/',
+        #'load_limit': True,
+    #},
+]
 
-# Docker settings
-IMAGE_NAME = 'database.kmatzen.com:5000/bkovacs_opensurfaces'
-
-MIN_MEM = 2000
+# Minimum amount of memory (in MB) needed per thread
+MIN_MEM = 1000
 # Tmux specific settings
 # We start a tmux session for each docker command execution, so the user can easily kill them later
 TMUX_SESSION = 'celery'
@@ -39,13 +51,16 @@ TMUX_HISTORY_LIMIT = '8000'
 # If the tmux session already exists, kill that before starting another
 KILL_EXISTING = False
 # If this is true, we also stop the container when "stop" command is called
-STOP_CONTAINER = False
+STOP_CONTAINER = True
 # If true, we don't start more threads than the cpu count - current load
 LOAD_LIMIT = False
-# The commands which will be executed in the docker container for the different options
-# Minimum amount of memory (in MB) needed per thread
-DOCKER_START_CMD = 'cd /host/opensurfaces; ./scripts/start_queue_worker.sh {machine_name} {thread_count} intrinsic'
 
+# Docker settings
+IMAGE_NAME = 'database.kmatzen.com:5000/bkovacs_opensurfaces'
+
+# The commands which will be executed in the docker container for the different options
+DOCKER_START_CMD = 'cd /host/opensurfaces; ./scripts/start_queue_worker.sh {machine_name} {thread_count} matlab'
+#DOCKER_START_CMD = 'cd /host/opensurfaces; ./scripts/start_queue_worker.sh {machine_name} {thread_count} matlab'
 
 ###############################################################################
 # Implementation:
@@ -83,6 +98,8 @@ def run_remotely(machine_name, ssh_cmd, verbose=0):
         print 'Running command: "%s"...' % cmd
     process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
     output, errors = process.communicate()
+    if output and verbose > 1:
+        print 'STDOUT:', output
     if errors:
         print 'STDERR:', errors
 
@@ -140,75 +157,80 @@ def get_cpu_stats(machine_name, verbose=0):
 
 
 def start_container(machine_name, image_name, root_path, verbose=0):
-    ssh_cmd = 'docker pull %s; cd %s; docker run -t -i -d -v /lib/modules:/lib/modules -v $PWD:/host --net=host --privileged %s zsh' % (
+    if verbose:
+        print 'Starting container for image "%s"...' % image_name
+
+    ssh_cmd = 'docker pull %s; cd %s; docker run -t -i -d -v /lib/modules:/lib/modules -v /usr/local/MATLAB:/usr/local/MATLAB -v $PWD:/host --user=ubuntu --net=host --privileged %s zsh' % (
         image_name, qd(root_path), image_name,
     )
     return run_remotely(machine_name, ssh_cmd, verbose)
 
 
 def stop_container(machine_name, container_id, verbose=0):
+    if verbose:
+        print 'Stopping container "%s"...' % container_id
+
     ssh_cmd = 'docker stop %s' % container_id
     return run_remotely(machine_name, ssh_cmd, verbose)
 
 
 def main(args):
     if args.op == 'start':
-        msg = 'Starting jobs...'
+        print 'Starting jobs...'
         docker_cmd = DOCKER_START_CMD
     elif args.op == 'stop':
-        msg = 'Stopping jobs...'
+        print 'Stopping jobs...'
         # Empty command kills the tmux session
         docker_cmd = ''
     else:
         raise ValueError('Invalid operation: "%s"' % args.op)
 
-    print msg
+    format_str = '%%s%s%%s' % MACHINE_ID_FORMAT
 
-    for mid in MACHINE_IDS:
-        format_str = '%%s%s%%s' % MACHINE_ID_FORMAT
-        machine_name = format_str % (MACHINE_PREFIX, mid, MACHINE_SUFFIX)
-        print 'Executing on %s...' % machine_name
-
-        container_id = get_container_id(machine_name, IMAGE_NAME, args.verbose)
-
-        # Stop the container if we have to and it's running
-        if STOP_CONTAINER and not docker_cmd and container_id:
-            stop_container(machine_name, container_id, args.verbose)
-            container_id = get_container_id(machine_name, IMAGE_NAME, args.verbose)
-
-        if not container_id:
-            # If we wanted to kill it but it's not even running, we are done
-            if not docker_cmd:
-                continue
-
-            print 'Docker container "%s" is not running, starting...' % IMAGE_NAME
-            start_container(machine_name, IMAGE_NAME, ROOT_PATH, args.verbose)
+    for machine_config in MACHINE_NAME_CONFIG:
+        for mid in machine_config['machine_ids']:
+            machine_name = format_str % (machine_config['machine_prefix'], mid, MACHINE_SUFFIX)
+            print 'Executing on %s...' % machine_name
 
             container_id = get_container_id(machine_name, IMAGE_NAME, args.verbose)
+
+            # Stop the container if we have to and it's running
+            if STOP_CONTAINER and not docker_cmd and container_id:
+                stop_container(machine_name, container_id, args.verbose)
+                container_id = get_container_id(machine_name, IMAGE_NAME, args.verbose)
+
             if not container_id:
-                print 'Failed to start docker container... Skipping this machine.'
+                # If we wanted to kill it but it's not even running, we are done
+                if not docker_cmd:
+                    continue
+
+                start_container(machine_name, IMAGE_NAME, machine_config['root_path'], args.verbose)
+                container_id = get_container_id(machine_name, IMAGE_NAME, args.verbose)
+                if not container_id:
+                    print 'Failed to start docker container... Skipping this machine.'
+                    continue
+
+            used_memory, all_memory = get_mem_stats(machine_name, args.verbose)
+            load, cpu_num = get_cpu_stats(machine_name, args.verbose)
+
+            max_thread_count = (all_memory - used_memory) / MIN_MEM
+            max_thread_count = min(max_thread_count, cpu_num)
+            if machine_config.get('load_limit', LOAD_LIMIT):
+                max_thread_count = min(max_thread_count, cpu_num - round(load))
+            max_thread_count = int(max(0, max_thread_count))
+            max_thread_count = machine_config.get('max_thread_count', max_thread_count)
+            print 'Max treads on %s: %d' % (machine_name, max_thread_count)
+
+            if docker_cmd and max_thread_count == 0:
+                print 'The machine is fully occupied, skipping...'
                 continue
 
-        used_memory, all_memory = get_mem_stats(machine_name, args.verbose)
-        load, cpu_num = get_cpu_stats(machine_name, args.verbose)
-
-        max_thread_count = (all_memory - used_memory) / MIN_MEM
-        max_thread_count = min(max_thread_count, cpu_num)
-        if LOAD_LIMIT:
-            max_thread_count = min(max_thread_count, cpu_num - round(load))
-        max_thread_count = max(0, max_thread_count)
-        print 'Max treads on %s: %d' % (machine_name, max_thread_count)
-
-        if docker_cmd and max_thread_count == 0:
-            print 'The machine is fully occupied, skipping...'
-            continue
-
-        subs_dic = {'machine_name': machine_name, 'thread_count': max_thread_count}
-        subs_docker_cmd = docker_cmd.format(**subs_dic)
-        run_on_docker(
-            machine_name, container_id, subs_docker_cmd, TMUX_SESSION,
-            TMUX_HISTORY_LIMIT, KILL_EXISTING, args.verbose
-        )
+            subs_dic = {'machine_name': machine_name, 'thread_count': max_thread_count}
+            subs_docker_cmd = docker_cmd.format(**subs_dic)
+            run_on_docker(
+                machine_name, container_id, subs_docker_cmd, TMUX_SESSION,
+                TMUX_HISTORY_LIMIT, KILL_EXISTING, args.verbose
+            )
 
 
 if __name__ == '__main__':

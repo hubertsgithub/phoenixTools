@@ -21,7 +21,7 @@ MACHINE_PREFIX="phoenix"
 
 # id following prefix:
 #MACHINE_IDS="s1 s2 s3 s4 s5 $(seq 0 18) $(seq 100 109)"
-MACHINE_IDS="$(seq 0 28)"
+MACHINE_IDS="$(seq 0 29)"
 MACHINE_ID_FORMAT="%02d"
 
 # suffix following id:
