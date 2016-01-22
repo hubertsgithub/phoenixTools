@@ -22,11 +22,6 @@ MACHINE_SUFFIX = ''
 
 # key: machine prefix, value: list of ids followed by prefix
 MACHINE_NAME_CONFIG = [
-    {
-        'machine_prefix': 'phoenix',
-        'machine_ids': range(1, 5) + [6, 7] + range(9, 14) + [16, 17], #range(22, 25) + range(26, 30),
-        'root_path': '/home/bk472/projects/finegrained/code/',
-    },
     #{
         #'machine_prefix': 'zeus',
         #'machine_ids': [1, ],
@@ -40,13 +35,25 @@ MACHINE_NAME_CONFIG = [
         #'root_path': '/home/bkovacs/projects/finegrained/code/',
         #'load_limit': True,
     #},
+    {
+        'machine_prefix': 'phoenix',
+        'machine_ids': range(19, 29),
+        'queue_config': [
+            {
+                #'name': 'intrinsic-eval',
+                'name': 'intrinsic-decomp-general',
+                'device_ids': [1],
+            },
+        ],
+        'root_path': '/home/bk472/projects/finegrained/code/',
+    },
 ]
 
 # Minimum amount of memory (in MB) needed per thread
 MIN_MEM = 1000
 # Tmux specific settings
 # We start a tmux session for each docker command execution, so the user can easily kill them later
-TMUX_SESSION = 'celery'
+TMUX_SESSION_PREFIX = 'celery'
 TMUX_HISTORY_LIMIT = '8000'
 # If the tmux session already exists, kill that before starting another
 KILL_EXISTING = False
@@ -59,8 +66,7 @@ LOAD_LIMIT = False
 IMAGE_NAME = 'database.kmatzen.com:5000/bkovacs_opensurfaces'
 
 # The commands which will be executed in the docker container for the different options
-DOCKER_START_CMD = 'cd /host/opensurfaces; ./scripts/start_queue_worker.sh {machine_name} {thread_count} matlab'
-#DOCKER_START_CMD = 'cd /host/opensurfaces; ./scripts/start_queue_worker.sh {machine_name} {thread_count} matlab'
+DOCKER_START_CMD = 'cd /host/opensurfaces; ./scripts/start_queue_worker.sh {machine_name} {thread_count} {queue_name} {device_id}'
 
 ###############################################################################
 # Implementation:
@@ -219,18 +225,35 @@ def main(args):
                 max_thread_count = min(max_thread_count, cpu_num - round(load))
             max_thread_count = int(max(0, max_thread_count))
             max_thread_count = machine_config.get('max_thread_count', max_thread_count)
-            print 'Max treads on %s: %d' % (machine_name, max_thread_count)
+            print 'Max threads on %s: %d' % (machine_name, max_thread_count)
 
             if docker_cmd and max_thread_count == 0:
                 print 'The machine is fully occupied, skipping...'
                 continue
 
-            subs_dic = {'machine_name': machine_name, 'thread_count': max_thread_count}
-            subs_docker_cmd = docker_cmd.format(**subs_dic)
-            run_on_docker(
-                machine_name, container_id, subs_docker_cmd, TMUX_SESSION,
-                TMUX_HISTORY_LIMIT, KILL_EXISTING, args.verbose
-            )
+            if 'queue_config' not in machine_config:
+                machine_config['queue_config'] = [{
+                    'name': '',
+                }]
+
+            for queue_config in machine_config['queue_config']:
+                queue_name = queue_config['name']
+                device_ids = queue_config.get('device_ids', [0])
+                for device_id in device_ids:
+                    tmux_session = '%s-%s-%d' % (TMUX_SESSION_PREFIX, queue_name, device_id)
+
+                    subs_dic = {
+                        'machine_name': machine_name,
+                        'thread_count': max_thread_count,
+                        'queue_name': queue_name,
+                        'device_id': device_id,
+                    }
+                    subs_docker_cmd = docker_cmd.format(**subs_dic)
+
+                    run_on_docker(
+                        machine_name, container_id, subs_docker_cmd, tmux_session,
+                        TMUX_HISTORY_LIMIT, KILL_EXISTING, args.verbose
+                    )
 
 
 if __name__ == '__main__':
