@@ -37,11 +37,11 @@ MACHINE_NAME_CONFIG = [
     #},
     {
         'machine_prefix': 'phoenix',
-        'machine_ids': range(19, 29),
+        'machine_ids': range(22, 23),
         'queue_config': [
             {
                 #'name': 'intrinsic-eval',
-                'name': 'intrinsic-decomp-general',
+                'name': 'intrinsic-eval-synth',
                 'device_ids': [1],
             },
         ],

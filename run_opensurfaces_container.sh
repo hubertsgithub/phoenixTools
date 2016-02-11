@@ -9,6 +9,10 @@ if [ -z "$(docker ps | grep $IMAGE_NAME)" ]; then
 	echo "Docker image '$IMAGE_NAME' is not running, starting..."
 	docker pull $IMAGE_NAME
 	docker run -t -i -v /lib/modules:/lib/modules -v /usr/local/MATLAB/:/usr/local/MATLAB/ -v $PWD:/host --user=ubuntu --net=host --privileged $IMAGE_NAME zsh
+	#set +e
+	#sudo nvidia-docker volume setup
+	#set -e
+	#nvidia-docker run -t -i -v /usr/local/MATLAB/:/usr/local/MATLAB/ -v $PWD:/host --user=ubuntu --net=host $IMAGE_NAME zsh
 else
 	echo "Docker image '$IMAGE_NAME' is running, attaching..."
 	IMAGE_ID=$(docker ps | grep $IMAGE_NAME | awk '{print $1}')
