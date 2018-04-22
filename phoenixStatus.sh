@@ -18,124 +18,128 @@
 
 # basename prefix:
 MACHINE_PREFIX="phoenix"
+declare -a arr=("phoenix" "zeus")
 
-# id following prefix:
-#MACHINE_IDS="s1 s2 s3 s4 s5 $(seq 0 18) $(seq 100 109)"
-MACHINE_IDS="$(seq 0 29)"
-MACHINE_ID_FORMAT="%02d"
+for MACHINE_PREFIX in "${arr[@]}"; do
+	# id following prefix:
+	#MACHINE_IDS="s1 s2 s3 s4 s5 $(seq 0 18) $(seq 100 109)"
+	MACHINE_IDS="$(seq 0 29)"
+	MACHINE_ID_FORMAT="%02d"
 
-# suffix following id:
-#MACHINE_SUFFIX=".cs.cornell.edu"
-MACHINE_SUFFIX=""
+	# suffix following id:
+	#MACHINE_SUFFIX=".cs.cornell.edu"
+	MACHINE_SUFFIX=""
 
-# length of machine name that will be unique from left
-# if this is incorrect, the table may have extra empty rows but
-# otherwise will work
-UNIQ_LEN=9
+	# length of machine name that will be unique from left
+	# if this is incorrect, the table may have extra empty rows but
+	# otherwise will work
+	UNIQ_LEN=9
 
 
-###############################################################################
-# Implementation:
+	###############################################################################
+	# Implementation:
 
-if [ "$1" == "-s" ]; then
-    sync=1
-else
-    sync=0
-fi
+	if [ "$1" == "-s" ]; then
+		sync=1
+	else
+		sync=0
+	fi
 
-# use temporary file to store results
-TMPFILE=~/.hydrastatus.$$
-if [ -f $TMPFILE ]; then
-    echo "Tempfile $TMPFILE already exists!"
-    exit
-fi
+	# use temporary file to store results
+	TMPFILE=~/.hydrastatus.$$
+	if [ -f $TMPFILE ]; then
+		echo "Tempfile $TMPFILE already exists!"
+		exit
+	fi
 
-#trap "echo trap1; kill 0; echo trap2; rm -f $TMPFILE; echo trap3" SIGINT SIGTERM EXIT
-trap "pkill -P $$; rm -f $TMPFILE; exit" SIGINT SIGTERM EXIT
+	#trap "echo trap1; kill 0; echo trap2; rm -f $TMPFILE; echo trap3" SIGINT SIGTERM EXIT
+	trap "pkill -P $$; rm -f $TMPFILE; exit" SIGINT SIGTERM EXIT
 
-# local variables
-printing=0
-done=0
-printtotal=0
+	# local variables
+	printing=0
+	done=0
+	printtotal=0
 
-# print current results
-printresult(){
-    # sort using special number, remove number, then print result in a table with red rows for overloaded nodes
-    table="$(<$TMPFILE sort -nr | uniq -w $UNIQ_LEN | sort -n | awk 'NF>=12 { if ($7 > $10 * 0.8 || $11 > $12 * 0.8 || $13 !~ ".*G") printf "\033[1;31m"; printf "%8s  |  %2d %-5s  |  %2d cpus  |  load %5.2f, %5.2f, %5.2f  (%6.2f %%)  |  mem %6d / %6d MB (%6.2f %%)  |  /tmp  %s\n", $2, $3, $4, $10, $7, $8, $9, 100.0*$7/$10, $11, $12, 100.0*$11/$12, $13; if ($7 > $10 * 0.8 || $11 > $12 * 0.8 || $13 !~ ".*G") printf "\033[m\017" } NF<12 {printf "%8s  |\n", $2}')"
+	# print current results
+	printresult(){
+		# sort using special number, remove number, then print result in a table with red rows for overloaded nodes
+		#table="$(<$TMPFILE sort -nr | uniq -w $UNIQ_LEN | sort -n | awk 'NF>=12 { if ($7 > $10 * 0.8 || $11 > $12 * 0.8 || $13 !~ ".*G") printf "\033[1;31m"; printf "%8s  |  %2d %-5s  |  %2d cpus  |  load %5.2f, %5.2f, %5.2f  (%6.2f %%)  |  mem %6d / %6d MB (%6.2f %%)  |  /tmp  %s | GPU %.4s %s/%s %s | GPU %.4s %s/%s %s| GPU %.4s %s/%s %s| GPU %.4s %s/%s %s\n", $2, $3, $4, $10, $7, $8, $9, 100.0*$7/$10, $11, $12, 100.0*$11/$12, $13, $20, $22, $23, $24, $25,$27,$28,$29, $30,$32,$33,$34, $35,$37,$38,$39; if ($7 > $10 * 0.8 || $11 > $12 * 0.8 || $13 !~ ".*G") printf "\033[m\017" } NF<12 {printf "%8s  |\n", $2}')"
+		table="$(<$TMPFILE sort -nr | uniq -w $UNIQ_LEN | sort -n | awk 'NF>=12 { if ($7 > $10 * 0.8 || $11 > $12 * 0.8 || $13 !~ ".*G") printf "\033[1;31m"; printf "%8s  |  %2d %-5s  |  %2d cpus  |  mem %6d / %6d MB (%6.2f %%)  |  /tmp  %s | GPU %.4s %s/%s %s | GPU %.4s %s/%s %s| GPU %.4s %s/%s %s| GPU %.4s %s/%s %s\n", $2, $3, $4, $10, $11, $12, 100.0*$11/$12, $13, $20, $22, $23, $24, $25,$27,$28,$29, $30,$32,$33,$34, $35,$37,$38,$39; if ($7 > $10 * 0.8 || $11 > $12 * 0.8 || $13 !~ ".*G") printf "\033[m\017" } NF<12 {printf "%8s  |\n", $2}')"
 
-    # print result
-    if [ "$sync" != "1" ]; then
-        clear
-    else
-        echo -en "\r"
-    fi
-    echo "$0"
-    echo -e "$table"
+		# print result
+		if [ "$sync" != "1" ]; then
+			clear
+		else
+			echo -en "\r"
+		fi
+		echo "$0"
+		echo -e "$table"
 
-    # compute totals
-    if [ "$printtotal" == "1" ]; then
-        tnodes=$(cat $TMPFILE | grep -c load)
-        tload=$(<$TMPFILE awk '{ SUM += $7 } END { print SUM }')
-        tcpus=$(<$TMPFILE awk '{ SUM += $10 } END { print SUM }')
-        tmem1=$(<$TMPFILE awk '{ SUM += $11 } END { print SUM }')
-        tmem2=$(<$TMPFILE awk '{ SUM += $12 } END { print SUM }')
-        tcpuperc=$(echo "100.0 * $tload / $tcpus" | bc)
-        tmemperc=$(echo "100.0 * $tmem1 / $tmem2" | bc) 
+		# compute totals
+		if [ "$printtotal" == "1" ]; then
+			tnodes=$(cat $TMPFILE | grep -c load)
+			tload=$(<$TMPFILE awk '{ SUM += $7 } END { print SUM }')
+			tcpus=$(<$TMPFILE awk '{ SUM += $10 } END { print SUM }')
+			tmem1=$(<$TMPFILE awk '{ SUM += $11 } END { print SUM }')
+			tmem2=$(<$TMPFILE awk '{ SUM += $12 } END { print SUM }')
+			tcpuperc=$(echo "100.0 * $tload / $tcpus" | bc)
+			tmemperc=$(echo "100.0 * $tmem1 / $tmem2" | bc) 
 
-        echo -e "\nTOTAL:  $tnodes nodes  |  $tcpus cpus  |  load $tload / $tcpus ($tcpuperc %)  |  mem $tmem1 / $tmem2 MB ($tmemperc %)"
-    fi
+			echo -e "\nTOTAL:  $tnodes nodes  |  $tcpus cpus  |  load $tload / $tcpus ($tcpuperc %)  |  mem $tmem1 / $tmem2 MB ($tmemperc %)"
+		fi
 
-    # if still running
-    if [ "$done" == "0" ]; then
-        echo -e "\nquerying nodes..."
-    fi
-}
+		# if still running
+		if [ "$done" == "0" ]; then
+			echo -e "\nquerying nodes..."
+		fi
+	}
 
-# initial message
-if [ "$sync" == "1" ]; then
-    echo -n "querying nodes..."
-else
-    for f in $MACHINE_IDS; do
+	# initial message
+	if [ "$sync" == "1" ]; then
+		echo -n "querying nodes..."
+	else
+		for f in $MACHINE_IDS; do
+			if [ $f -ge 0 ] 2>/dev/null; then
+				ff=$(printf $MACHINE_ID_FORMAT $f)
+			else
+				ff=$f
+			fi
+			echo "$ff $MACHINE_PREFIX$ff" >> $TMPFILE
+		done
+
+		printtotal=0
+		printresult
+		printtotal=1
+	fi
+
+	# query all machines
+	for f in $MACHINE_IDS; do
+		(
 		if [ $f -ge 0 ] 2>/dev/null; then
 			ff=$(printf $MACHINE_ID_FORMAT $f)
 		else
 			ff=$f
 		fi
-        echo "$ff $MACHINE_PREFIX$ff" >> $TMPFILE
-    done
+		echo "$ff $MACHINE_PREFIX$ff $(ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=30 $MACHINE_PREFIX$ff$MACHINE_SUFFIX 'echo $(uptime | sed -r "s/^.*([0-9]+)\s+users?,\s+load average: (.*$)/\1 users load average \2/" | tr "," " ") $(grep -c processor /proc/cpuinfo) $(free -m | grep + | awk '\''{print $3 " " ($3+$4)}'\'') $(df -h /tmp | grep tmp | grep -E -o "\w*.?\w*\s*[0-9]+%") $(nvidia-smi --query-gpu=gpu_name,gpu_bus_id,memory.used,memory.total,utilization.gpu --format=csv | sed -e "s/\ //g" | sed -e "s/,/\ /g") END' 2>/dev/null)" | grep END 1>>$TMPFILE
+		if [[ "$sync" != "1" && "$printing" == "0" ]]; then
+			sleep 0
+			if [ "$printing" == "0" ]; then
+				printing=1
+				printresult
+				printing=0
+			fi
+		fi
+		) &
+	done
 
-    printtotal=0
-    printresult
-    printtotal=1
-fi
+	# wait for result
+	wait
 
-# query all machines
-for f in $MACHINE_IDS; do
-    (
-	if [ $f -ge 0 ] 2>/dev/null; then
-		ff=$(printf $MACHINE_ID_FORMAT $f)
-	else
-		ff=$f
-	fi
-    echo "$ff $MACHINE_PREFIX$ff $(ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=30 $MACHINE_PREFIX$ff$MACHINE_SUFFIX 'echo $(uptime | sed -r "s/^.*([0-9]+)\s+users?,\s+load average: (.*$)/\1 users load average \2/" | tr "," " ") $(grep -c processor /proc/cpuinfo) $(free -m | grep + | awk '\''{print $3 " " ($3+$4)}'\'') $(df -h /tmp | grep tmp | grep -E -o "\w*.?\w*\s*[0-9]+%") END' 2>/dev/null)" | grep END 1>>$TMPFILE
-    if [[ "$sync" != "1" && "$printing" == "0" ]]; then
-        sleep 0
-        if [ "$printing" == "0" ]; then
-            printing=1
-            printresult
-            printing=0
-        fi
-    fi
-    ) &
+	# print final result
+	done=1
+	printresult
+
+	# clean up
+	rm -f $TMPFILE
 done
-
-# wait for result
-wait
-
-# print final result
-done=1
-printresult
-
-# clean up
-rm -f $TEMPFILE
 
